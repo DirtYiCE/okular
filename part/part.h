@@ -340,7 +340,6 @@ private:
     Sidebar *m_sidebar;
     SearchWidget *m_searchWidget;
     FindBar *m_findBar;
-    KMessageWidget *m_migrationMessage;
     KMessageWidget *m_topMessage;
     KMessageWidget *m_formsMessage;
     KMessageWidget *m_infoMessage;

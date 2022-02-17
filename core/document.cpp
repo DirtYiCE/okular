@@ -5246,15 +5246,6 @@ void Document::walletDataForFile(const QString &fileName, QString *walletName, Q
     }
 }
 
-bool Document::isDocdataMigrationNeeded() const
-{
-    return false;
-}
-
-void Document::docdataMigrationDone()
-{
-}
-
 QAbstractItemModel *Document::layersModel() const
 {
     return d->m_generator ? d->m_generator->layersModel() : nullptr;
