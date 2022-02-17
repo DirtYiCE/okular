@@ -4929,6 +4929,11 @@ void Document::walletDataForFile(const QString &fileName, QString *walletName, Q
     }
 }
 
+bool Document::canSaveAnnotationsInternally() const
+{
+    return !d->m_annotationsNeedSaveAs;
+}
+
 QAbstractItemModel *Document::layersModel() const
 {
     return d->m_generator ? d->m_generator->layersModel() : nullptr;

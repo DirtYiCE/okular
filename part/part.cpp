@@ -1775,7 +1775,7 @@ bool Part::tryOpeningUrlWithFragmentAsName()
 
 bool Part::queryClose()
 {
-    if (!isReadWrite() || !isModified())
+    if (!isReadWrite() || !isModified() || m_document->canSaveAnnotationsInternally())
         return true;
 
     // TODO When we get different saving backends we need to query the backend
