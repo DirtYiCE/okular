@@ -55,6 +55,7 @@
 #include <KIO/Global>
 #include <KLocalizedString>
 #include <KMacroExpander>
+#include <KMessageBox>
 #include <KPluginMetaData>
 #include <KProcess>
 #include <KRun>
@@ -1027,6 +1028,22 @@ DocumentViewport DocumentPrivate::nextDocumentViewport() const
     return ret;
 }
 
+void DocumentPrivate::warnLimitedAnnotSupport()
+{
+    if (!m_showWarningLimitedAnnotSupport)
+        return;
+    m_showWarningLimitedAnnotSupport = false; // Show the warning once
+
+    if (m_annotationsNeedSaveAs) {
+        // Shown if the user is editing annotations in a file whose metadata is
+        // not stored locally (.okular archives belong to this category)
+        KMessageBox::information(m_widget, i18n("Your annotation changes will not be saved automatically. Use File -> Save As...\nor your changes will be lost once the document is closed"), QString(), "annotNeedSaveAs");
+    } else if (!canAddAnnotationsNatively()) {
+        // If the generator doesn't support native annotations
+        KMessageBox::information(m_widget, i18n("Your annotations are saved internally by Okular.\nYou can export the annotated document using File -> Export As -> Document Archive"), QString(), "annotExportAsArchive");
+    }
+}
+
 void DocumentPrivate::performAddPageAnnotation(int page, Annotation *annotation)
 {
     Okular::SaveInterface *iface = qobject_cast<Okular::SaveInterface *>(m_generator);
@@ -1058,6 +1075,8 @@ void DocumentPrivate::performAddPageAnnotation(int page, Annotation *annotation)
         // Redraw everything, including ExternallyDrawn annotations
         refreshPixmaps(page);
     }
+
+    warnLimitedAnnotSupport();
 }
 
 void DocumentPrivate::performRemovePageAnnotation(int page, Annotation *annotation)
@@ -1095,6 +1114,8 @@ void DocumentPrivate::performRemovePageAnnotation(int page, Annotation *annotati
             refreshPixmaps(page);
         }
     }
+
+    warnLimitedAnnotSupport();
 }
 
 void DocumentPrivate::performModifyPageAnnotation(int page, Annotation *annotation, bool appearanceChanged)
@@ -1132,6 +1153,10 @@ void DocumentPrivate::performModifyPageAnnotation(int page, Annotation *annotati
         qCDebug(OkularCoreDebug) << "Refreshing Pixmaps";
         refreshPixmaps(page);
     }
+
+    // If the user is moving the annotation, don't steal the focus
+    if ((annotation->flags() & Annotation::BeingMoved) == 0)
+        warnLimitedAnnotSupport();
 }
 
 void DocumentPrivate::performSetAnnotationContents(const QString &newContents, Annotation *annot, int pageNumber)
@@ -1245,23 +1270,21 @@ void DocumentPrivate::saveDocumentInfo() const
     doc.appendChild(root);
 
     // 2.1. Save page attributes (bookmark state, annotations, ... ) to DOM
-    //  -> do this if there are not-yet-migrated annots or forms in docdata/
-    if (m_docdataMigrationNeeded) {
-        QDomElement pageList = doc.createElement(QStringLiteral("pageList"));
-        root.appendChild(pageList);
-        // OriginalAnnotationPageItems and OriginalFormFieldPageItems tell to
-        // store the same unmodified annotation list and form contents that we
-        // read when we opened the file and ignore any change made by the user.
-        // Since we don't store annotations and forms in docdata/ any more, this is
-        // necessary to preserve annotations/forms that previous Okular version
-        // had stored there.
-        const PageItems saveWhat = AllPageItems | OriginalAnnotationPageItems | OriginalFormFieldPageItems;
-        // <page list><page number='x'>.... </page> save pages that hold data
-        QVector<Page *>::const_iterator pIt = m_pagesVector.constBegin(), pEnd = m_pagesVector.constEnd();
-        for (; pIt != pEnd; ++pIt) {
-            (*pIt)->d->saveLocalContents(pageList, doc, saveWhat);
-        }
+    QDomElement pageList = doc.createElement(QStringLiteral("pageList"));
+    root.appendChild(pageList);
+    PageItems saveWhat = AllPageItems;
+    if (m_annotationsNeedSaveAs) {
+        /* In this case, if the user makes a modification, he's requested to
+         * save to a new document. Therefore, if there are existing local
+         * annotations, we save them back unmodified in the original
+         * document's metadata, so that it appears that it was not changed */
+        saveWhat |= OriginalAnnotationPageItems;
     }
+
+    // <page list><page number='x'>.... </page> save pages that hold data
+    QVector<Page *>::const_iterator pIt = m_pagesVector.constBegin(), pEnd = m_pagesVector.constEnd();
+    for (; pIt != pEnd; ++pIt)
+        (*pIt)->d->saveLocalContents(pageList, doc, saveWhat);
 
     // 2.2. Save document info (current viewport, history, ... ) to DOM
     QDomElement generalInfo = doc.createElement(QStringLiteral("generalInfo"));
@@ -2494,12 +2517,16 @@ Document::OpenResult Document::openDocument(const QString &docFile, const QUrl &
     d->m_pageController = new PageController();
     connect(d->m_pageController, &PageController::rotationFinished, this, [this](int p, Okular::Page *op) { d->rotationFinished(p, op); });
 
+    bool containsExternalAnnotations = false;
     for (Page *p : qAsConst(d->m_pagesVector)) {
         p->d->m_doc = d;
+        if (!p->annotations().empty())
+            containsExternalAnnotations = true;
     }
 
-    d->m_metadataLoadingCompleted = false;
-    d->m_docdataMigrationNeeded = false;
+    // Be quiet while restoring local annotations
+    d->m_showWarningLimitedAnnotSupport = false;
+    d->m_annotationsNeedSaveAs = false;
 
     // 2. load Additional Data (bookmarks, local annotations and metadata) about the document
     if (d->m_archiveData) {
@@ -2507,14 +2534,14 @@ Document::OpenResult Document::openDocument(const QString &docFile, const QUrl &
         d->m_archiveData->metadataFile.fileName();
         d->loadDocumentInfo(d->m_archiveData->metadataFile, LoadPageInfo);
         d->loadDocumentInfo(LoadGeneralInfo);
+        d->m_annotationsNeedSaveAs = true;
     } else {
-        if (d->loadDocumentInfo(LoadPageInfo)) {
-            d->m_docdataMigrationNeeded = true;
-        }
+        d->loadDocumentInfo(LoadPageInfo);
         d->loadDocumentInfo(LoadGeneralInfo);
+        d->m_annotationsNeedSaveAs = (d->canAddAnnotationsNatively() && containsExternalAnnotations);
     }
 
-    d->m_metadataLoadingCompleted = true;
+    d->m_showWarningLimitedAnnotSupport = true;
     d->m_bookmarkManager->setUrl(d->m_url);
 
     // 3. setup observers internal lists and data
@@ -2753,7 +2780,6 @@ void Document::closeDocument()
     AudioPlayer::instance()->d->m_currentDocument = QUrl();
 
     d->m_undoStack->clear();
-    d->m_docdataMigrationNeeded = false;
 
 #if HAVE_MALLOC_TRIM
     // trim unused memory, glibc should do this but it seems it does not
@@ -3031,10 +3057,7 @@ QUrl Document::currentDocument() const
 
 bool Document::isAllowed(Permission action) const
 {
-    if (action == Okular::AllowNotes && (d->m_docdataMigrationNeeded || !d->m_annotationEditingEnabled)) {
-        return false;
-    }
-    if (action == Okular::AllowFillForms && d->m_docdataMigrationNeeded) {
+    if (action == Okular::AllowNotes && !d->m_annotationEditingEnabled) {
         return false;
     }
 
@@ -3460,7 +3483,12 @@ void Document::requestTextPage(uint pageNumber)
 
 void DocumentPrivate::notifyAnnotationChanges(int page)
 {
-    foreachObserverD(notifyPageChanged(page, DocumentObserver::Annotations));
+    int flags = DocumentObserver::Annotations;
+
+    if (m_annotationsNeedSaveAs)
+        flags |= DocumentObserver::NeedSaveAs;
+
+    foreachObserverD(notifyPageChanged(page, flags));
 }
 
 void DocumentPrivate::notifyFormChanges(int /*page*/)
@@ -5220,15 +5248,11 @@ void Document::walletDataForFile(const QString &fileName, QString *walletName, Q
 
 bool Document::isDocdataMigrationNeeded() const
 {
-    return d->m_docdataMigrationNeeded;
+    return false;
 }
 
 void Document::docdataMigrationDone()
 {
-    if (d->m_docdataMigrationNeeded) {
-        d->m_docdataMigrationNeeded = false;
-        foreachObserver(notifySetup(d->m_pagesVector, 0));
-    }
 }
 
 QAbstractItemModel *Document::layersModel() const
