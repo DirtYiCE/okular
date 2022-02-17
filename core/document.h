@@ -959,25 +959,6 @@ public:
     void walletDataForFile(const QString &fileName, QString *walletName, QString *walletFolder, QString *walletKey) const;
 
     /**
-     * Since version 0.21, okular does not allow editing annotations and
-     * form data if they are stored in the docdata directory (like older
-     * okular versions did by default).
-     * If this flag is set, then annotations and forms cannot be edited.
-     *
-     * @since 1.3
-     */
-    bool isDocdataMigrationNeeded() const;
-
-    /**
-     * Delete annotations and form data from the docdata folder. Call it if
-     * isDocdataMigrationNeeded() was true and you've just saved them to an
-     * external file.
-     *
-     * @since 1.3
-     */
-    void docdataMigrationDone();
-
-    /**
      * Returns the model for rendering layers (NULL if the document has no layers)
      *
      * @since 0.24
