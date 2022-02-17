@@ -519,6 +519,8 @@ public:
      */
     bool canModifyPageAnnotation(const Annotation *annotation) const;
 
+    bool canSaveAnnotationsInternally() const;
+
     /**
      *  Prepares to modify the properties of the given @p annotation.
      *  Must be called before the annotation's properties are modified

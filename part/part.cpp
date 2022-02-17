@@ -1819,7 +1819,7 @@ bool Part::tryOpeningUrlWithFragmentAsName()
 
 bool Part::queryClose()
 {
-    if (!isReadWrite() || !isModified()) {
+    if (!isReadWrite() || !isModified() || m_document->canSaveAnnotationsInternally()) {
         return true;
     }
 
