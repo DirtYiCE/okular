@@ -127,7 +127,6 @@ public:
         , m_fontsCached(false)
         , m_annotationEditingEnabled(true)
         , m_annotationBeingModified(false)
-        , m_docdataMigrationNeeded(false)
         , m_synctex_scanner(nullptr)
     {
         calculateMaxTextPages();
@@ -170,6 +169,7 @@ public:
     bool canRemoveExternalAnnotations() const;
     OKULARCORE_EXPORT static QString docDataFileName(const QUrl &url, qint64 document_size);
     bool cancelRenderingBecauseOf(PixmapRequest *executingRequest, PixmapRequest *newRequest);
+    void warnLimitedAnnotSupport();
 
     // Methods that implement functionality needed by undo commands
     void performAddPageAnnotation(int page, Annotation *annotation);
@@ -325,17 +325,12 @@ public:
 
     bool m_annotationEditingEnabled;
     bool m_annotationBeingModified; // is an annotation currently being moved or resized?
-    bool m_metadataLoadingCompleted;
+
+    bool m_annotationsNeedSaveAs;
+    bool m_showWarningLimitedAnnotSupport;
 
     QUndoStack *m_undoStack;
     QDomNode m_prevPropsOfAnnotBeingModified;
-
-    // Since 0.21, we no longer support saving annotations and form data in
-    // the docdata/ directory and we ask the user to migrate them to an
-    // external file as soon as possible, otherwise the document will be
-    // shown in read-only mode. This flag is set if the docdata/ XML file
-    // for the current document contains any annotation or form.
-    bool m_docdataMigrationNeeded;
 
     synctex_scanner_p m_synctex_scanner;
 
