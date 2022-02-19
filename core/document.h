@@ -916,6 +916,9 @@ public:
      */
     bool saveDocumentArchive(const QString &fileName);
 
+    bool saveDocumentMeta(const QString &fileName);
+    bool loadDocumentMeta(const QString &fileName);
+
     /**
      * Extract the document file from the current archive.
      *

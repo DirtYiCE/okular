@@ -742,6 +742,7 @@ void Part::setupViewerActions()
     m_save = nullptr;
     m_saveAs = nullptr;
     m_openContainingFolder = nullptr;
+    m_openMeta = nullptr;
 
     m_hamburgerMenuAction = nullptr;
 
@@ -933,6 +934,12 @@ void Part::setupActions()
         connect(m_hamburgerMenuAction, &KHamburgerMenu::aboutToShowMenu, this, &Part::slotUpdateHamburgerMenu);
     }
 #endif
+
+    m_openMeta = ac->addAction(QStringLiteral("open_meta"));
+    m_openMeta->setText(i18n("Open &meta..."));
+    m_openMeta->setIcon(QIcon::fromTheme(QStringLiteral("document-open")));
+    connect(m_openMeta, &QAction::triggered, this, &Part::slotOpenMeta);
+    m_openMeta->setEnabled(false);
 
     QAction *importPS = ac->addAction(QStringLiteral("import_ps"));
     importPS->setText(i18n("&Import PostScript as PDF..."));
@@ -1322,6 +1329,15 @@ bool Part::slotImportPSFile()
     return false;
 }
 
+bool Part::slotOpenMeta()
+{
+    QString filter = i18nc("File type name and pattern", "%1 (%2)", "Okular metadata", "*.okularmeta");
+    QUrl url = QFileDialog::getOpenFileUrl(widget(), QString(), QUrl(), filter);
+    if (!url.isLocalFile()) return false;
+
+    return m_document->loadDocumentMeta(url.toLocalFile());
+}
+
 void Part::setFileToWatch(const QString &filePath)
 {
     if (!m_watchedFilePath.isEmpty())
@@ -1529,12 +1545,14 @@ bool Part::openFile()
     if (m_save)
         m_save->setEnabled(ok && !(isstdin || mime.inherits(QStringLiteral("inode/directory"))));
     if (m_saveAs)
-        m_saveAs->setEnabled(ok && !(isstdin || mime.inherits(QStringLiteral("inode/directory"))));
+        m_saveAs->setEnabled(ok);
     emit enablePrintAction(ok && m_document->printingSupport() != Okular::Document::NoPrinting);
     m_printPreview->setEnabled(ok && m_document->printingSupport() != Okular::Document::NoPrinting);
     m_showProperties->setEnabled(ok);
     if (m_openContainingFolder)
         m_openContainingFolder->setEnabled(ok);
+    if (m_openMeta)
+        m_openMeta->setEnabled(ok);
     bool hasEmbeddedFiles = ok && m_document->embeddedFiles() && m_document->embeddedFiles()->count() > 0;
     if (m_showEmbeddedFiles)
         m_showEmbeddedFiles->setEnabled(hasEmbeddedFiles);
@@ -2476,11 +2494,12 @@ bool Part::slotSaveFileAs(bool showOkularArchiveAsDefaultFormat)
     // Prepare "Save As" dialog
     const QString originalMimeTypeFilter = i18nc("File type name and pattern", "%1 (%2)", originalMimeType.comment(), originalMimeType.globPatterns().join(QLatin1Char(' ')));
     const QString okularArchiveMimeTypeFilter = i18nc("File type name and pattern", "%1 (%2)", okularArchiveMimeType.comment(), okularArchiveMimeType.globPatterns().join(QLatin1Char(' ')));
+    const QString okularMetaMimeTypeFilter = i18nc("File type name and pattern", "%1 (%2)", "Okular metadata", "*.okularmeta");
 
     // What format choice should we show as default?
     QString selectedFilter = (isDocumentArchive || showOkularArchiveAsDefaultFormat || wontSaveForms || wontSaveAnnotations) ? okularArchiveMimeTypeFilter : originalMimeTypeFilter;
 
-    QString filter = originalMimeTypeFilter + QStringLiteral(";;") + okularArchiveMimeTypeFilter;
+    QString filter = originalMimeTypeFilter + QStringLiteral(";;") + okularArchiveMimeTypeFilter + QStringLiteral(";;") + okularMetaMimeTypeFilter;
 
     const QUrl saveUrl = QFileDialog::getSaveFileUrl(widget(), i18n("Save As"), url(), filter, &selectedFilter);
 
@@ -2489,8 +2508,9 @@ bool Part::slotSaveFileAs(bool showOkularArchiveAsDefaultFormat)
 
     // Has the user chosen to save in .okular archive format?
     const bool saveAsOkularArchive = (selectedFilter == okularArchiveMimeTypeFilter);
+    const bool saveAsOkularMeta = (selectedFilter == okularMetaMimeTypeFilter);
 
-    return saveAs(saveUrl, saveAsOkularArchive ? SaveAsOkularArchive : NoSaveAsFlags);
+    return saveAs(saveUrl, saveAsOkularMeta ? SaveAsOkularMeta : saveAsOkularArchive ? SaveAsOkularArchive : NoSaveAsFlags);
 }
 
 bool Part::saveAs(const QUrl &saveUrl)
@@ -2586,6 +2606,14 @@ bool Part::saveAs(const QUrl &saveUrl, SaveAsFlags flags)
         }
 
         copyJob = KIO::file_copy(QUrl::fromLocalFile(fileName), realSaveUrl, -1, KIO::Overwrite);
+    } else if (flags & SaveAsOkularMeta) {
+        if (!m_document->saveDocumentMeta(fileName)) {
+            KMessageBox::information(widget(), i18n("File could not be saved in '%1'. Try to save it to another location.", fileName));
+            return false;
+        }
+
+        copyJob = KIO::file_copy(QUrl::fromLocalFile(fileName), realSaveUrl, -1, KIO::Overwrite);
+
     } else {
         bool wontSaveForms, wontSaveAnnotations;
         checkNativeSaveDataLoss(&wontSaveForms, &wontSaveAnnotations);
@@ -2723,6 +2751,12 @@ bool Part::saveAs(const QUrl &saveUrl, SaveAsFlags flags)
     }
 
     m_document->setHistoryClean(true);
+
+    if (flags & SaveAsOkularMeta) {
+        if (url().isLocalFile())
+            setFileToWatch(localFilePath());
+        return true;
+    }
 
     bool reloadedCorrectly = true;
 
@@ -3115,6 +3149,7 @@ void Part::slotUpdateHamburgerMenu()
     // use findActionInKPartHierarchy(actionName).
     menu->addAction(findActionInKPartHierarchy(KStandardAction::name(KStandardAction::Open)));
     menu->addAction(findActionInKPartHierarchy(KStandardAction::name(KStandardAction::OpenRecent)));
+    menu->addAction(m_openMeta);
     menu->addAction(m_save);
     menu->addAction(m_saveAs);
     menu->addSeparator();
