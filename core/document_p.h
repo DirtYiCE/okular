@@ -160,7 +160,7 @@ public:
     SaveInterface *generatorSave(GeneratorInfo &info);
     Document::OpenResult openDocumentInternal(const KPluginMetaData &offer, bool isstdin, const QString &docFile, const QByteArray &filedata, const QString &password);
     static ArchiveData *unpackDocumentArchive(const QString &archivePath);
-    bool savePageDocumentInfo(QTemporaryFile *infoFile, int what) const;
+    void savePageDocumentInfo(QFile *infoFile, int what) const;
     DocumentViewport nextDocumentViewport() const;
     void notifyAnnotationChanges(int page);
     void notifyFormChanges(int page);

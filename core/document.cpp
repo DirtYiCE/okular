@@ -987,33 +987,28 @@ Document::OpenResult DocumentPrivate::openDocumentInternal(const KPluginMetaData
     return openResult;
 }
 
-bool DocumentPrivate::savePageDocumentInfo(QTemporaryFile *infoFile, int what) const
+void DocumentPrivate::savePageDocumentInfo(QFile *infoFile, int what) const
 {
-    if (infoFile->open()) {
-        // 1. Create DOM
-        QDomDocument doc(QStringLiteral("documentInfo"));
-        QDomProcessingInstruction xmlPi = doc.createProcessingInstruction(QStringLiteral("xml"), QStringLiteral("version=\"1.0\" encoding=\"utf-8\""));
-        doc.appendChild(xmlPi);
-        QDomElement root = doc.createElement(QStringLiteral("documentInfo"));
-        doc.appendChild(root);
+    // 1. Create DOM
+    QDomDocument doc(QStringLiteral("documentInfo"));
+    QDomProcessingInstruction xmlPi = doc.createProcessingInstruction(QStringLiteral("xml"), QStringLiteral("version=\"1.0\" encoding=\"utf-8\""));
+    doc.appendChild(xmlPi);
+    QDomElement root = doc.createElement(QStringLiteral("documentInfo"));
+    doc.appendChild(root);
 
-        // 2.1. Save page attributes (bookmark state, annotations, ... ) to DOM
-        QDomElement pageList = doc.createElement(QStringLiteral("pageList"));
-        root.appendChild(pageList);
-        // <page list><page number='x'>.... </page> save pages that hold data
-        QVector<Page *>::const_iterator pIt = m_pagesVector.constBegin(), pEnd = m_pagesVector.constEnd();
-        for (; pIt != pEnd; ++pIt) {
-            (*pIt)->d->saveLocalContents(pageList, doc, PageItems(what));
-        }
+    // 2.1. Save page attributes (bookmark state, annotations, ... ) to DOM
+    QDomElement pageList = doc.createElement(QStringLiteral("pageList"));
+    root.appendChild(pageList);
+    // <page list><page number='x'>.... </page> save pages that hold data
+    QVector<Page *>::const_iterator pIt = m_pagesVector.constBegin(), pEnd = m_pagesVector.constEnd();
+    for (; pIt != pEnd; ++pIt)
+        (*pIt)->d->saveLocalContents(pageList, doc, PageItems(what));
 
-        // 3. Save DOM to XML file
-        QString xml = doc.toString();
-        QTextStream os(infoFile);
-        os.setCodec("UTF-8");
-        os << xml;
-        return true;
-    }
-    return false;
+    // 3. Save DOM to XML file
+    QString xml = doc.toString();
+    QTextStream os(infoFile);
+    os.setCodec("UTF-8");
+    os << xml;
 }
 
 DocumentViewport DocumentPrivate::nextDocumentViewport() const
@@ -5175,9 +5170,8 @@ bool Document::saveDocumentArchive(const QString &fileName)
     }
 
     QTemporaryFile metadataFile;
-    if (!d->savePageDocumentInfo(&metadataFile, saveWhat)) {
-        return false;
-    }
+    if (!metadataFile.open()) return false;
+    d->savePageDocumentInfo(&metadataFile, saveWhat);
 
     const QByteArray contentDocXml = contentDoc.toByteArray();
     const mode_t perm = 0100644;
@@ -5191,6 +5185,25 @@ bool Document::saveDocumentArchive(const QString &fileName)
     }
 
     return true;
+}
+
+bool Document::saveDocumentMeta(const QString &fileName)
+{
+    if (!d->m_generator)
+        return false;
+
+    // ?? AnnotationPageItems, FormFieldPageItems
+    QFile metadataFile(fileName);
+    if (!metadataFile.open(QIODevice::ReadWrite)) return false;
+    d->savePageDocumentInfo(&metadataFile, AllPageItems);
+
+    return true;
+}
+
+bool Document::loadDocumentMeta(const QString &fileName)
+{
+  QFile metadataFile(fileName);
+  return d->loadDocumentInfo(metadataFile, LoadPageInfo);
 }
 
 bool Document::extractArchivedFile(const QString &destFileName)

@@ -234,6 +234,7 @@ protected Q_SLOTS:
     void slotUpdateHamburgerMenu();
     void slotExportAs(QAction *);
     bool slotImportPSFile();
+    bool slotOpenMeta();
     void slotAboutBackend();
     void slotReload();
     void close();
@@ -299,7 +300,8 @@ private:
 
     enum SaveAsFlag {
         NoSaveAsFlags = 0,      ///< No options
-        SaveAsOkularArchive = 1 ///< Save as Okular Archive (.okular) instead of document's native format
+        SaveAsOkularArchive = 1, ///< Save as Okular Archive (.okular) instead of document's native format
+        SaveAsOkularMeta = 2,
     };
     Q_DECLARE_FLAGS(SaveAsFlags, SaveAsFlag)
 
@@ -408,6 +410,7 @@ private:
 #endif
     QAction *m_showPresentation;
     QAction *m_openContainingFolder;
+    QAction *m_openMeta;
     KHamburgerMenu *m_hamburgerMenuAction;
     KToggleAction *m_showMenuBarAction;
     KToggleAction *m_showLeftPanel;
